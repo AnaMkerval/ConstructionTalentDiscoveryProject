@@ -1,0 +1,7 @@
+streamlit
+google-genai
+tavily-python
+requests
+beautifulsoup4
+pydantic
+python-dotenv
