@@ -1,7 +1,9 @@
 import streamlit as st
 
-from services.gemini_service import analyze_role
-
+from services.gemini_service import (
+    analyze_role,
+    generate_search_queries
+)
 
 st.set_page_config(
     page_title="Bright Sky Recruiting",
@@ -45,16 +47,24 @@ if st.button("Analyze role", type="primary"):
         try:
             with st.spinner("Analyzing construction role..."):
                 role_requirements = analyze_role(
-                    role_description,
-                    location
-                )
+                role_description,
+                 location
+                        )
 
-            st.success("Role analyzed successfully.")
+                st.success("Role analyzed successfully.")
 
-            st.header("Structured search requirements")
+                st.header("Structured search requirements")
 
-            st.json(role_requirements)
+                st.json(role_requirements)
 
+                with st.spinner("Creating construction-specific search strategies..."):
+                       search_queries = generate_search_queries(role_requirements)
+
+                st.success("Search strategies created.")
+
+                st.header("Search strategies")
+
+                st.json(search_queries)
         except Exception as error:
             st.error("The role analysis failed.")
             st.code(str(error))
