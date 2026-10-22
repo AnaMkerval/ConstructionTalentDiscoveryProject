@@ -8,67 +8,94 @@ from google.genai import types
 
 load_dotenv()
 def generate_search_queries(role_requirements: dict) -> dict:
-    api_key = os.getenv("GEMINI_API_KEY")
 
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY was not found.")
-
-    client = genai.Client(api_key=api_key)
-
-    requirements_text = json.dumps(
-        role_requirements,
-        indent=2
+    role_family = role_requirements.get(
+        "role_family",
+        "construction professional"
     )
 
-    prompt = f"""
-You are an expert construction recruiting search planner.
-
-Based on these structured role requirements:
-
-{requirements_text}
-
-Create public web search queries that can find qualified candidates
-even when their exact job title is different.
-
-Return only valid JSON with exactly these fields:
-
-{{
-  "title_queries": [],
-  "project_queries": [],
-  "skill_queries": [],
-  "company_queries": [],
-  "broader_queries": []
-}}
-
-Rules:
-
-1. Create no more than 2 queries in each category.
-2. Include alternative construction job titles.
-3. Include project types such as healthcare, hospital, commercial,
-   residential, industrial, or public projects when relevant.
-4. Include the location in most queries.
-5. Search for people and professional experience, not only job postings.
-6. Do not search for age, gender, race, religion, disability, or other
-   sensitive personal information.
-7. Return JSON only.
-"""
-
-    response = client.models.generate_content(
-        model="gemini-3.5-flash-lite",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.2,
-            response_mime_type="application/json"
-        )
+    alternative_titles = role_requirements.get(
+        "alternative_titles",
+        []
     )
 
-    try:
-        return json.loads(response.text)
-    except json.JSONDecodeError as error:
-        raise ValueError(
-            f"Gemini returned invalid search-query JSON: {response.text}"
-        ) from error
+    project_types = role_requirements.get(
+        "project_types",
+        []
+    )
 
+    technical_skills = role_requirements.get(
+        "technical_skills",
+        []
+    )
+
+    location = role_requirements.get(
+        "location",
+        ""
+    )
+
+    title_1 = (
+        alternative_titles[0]
+        if len(alternative_titles) > 0
+        else "Construction Superintendent"
+    )
+
+    title_2 = (
+        alternative_titles[1]
+        if len(alternative_titles) > 1
+        else "Field Superintendent"
+    )
+
+    project_1 = (
+        project_types[0]
+        if len(project_types) > 0
+        else "commercial construction"
+    )
+
+    project_2 = (
+        project_types[1]
+        if len(project_types) > 1
+        else "healthcare construction"
+    )
+
+    skill_1 = (
+        technical_skills[0]
+        if len(technical_skills) > 0
+        else "subcontractor coordination"
+    )
+
+    skill_2 = (
+        technical_skills[1]
+        if len(technical_skills) > 1
+        else "construction documents"
+    )
+
+    return {
+        "title_queries": [
+            f"{title_1} {location} construction professional",
+            f"{title_2} {location} commercial construction profile"
+        ],
+
+        "project_queries": [
+            f"{role_family} {location} hospital construction project",
+            f"{role_family} {location} healthcare construction projects"
+        ],
+
+        "skill_queries": [
+            f"{role_family} {location} {skill_1}",
+            f"{role_family} {location} {skill_2} blueprint reading"
+        ],
+
+        "company_queries": [
+            f"general contractor {location} healthcare construction superintendent team",
+            f"commercial contractor {location} hospital construction superintendent"
+        ],
+
+        "broader_queries": [
+            f"senior superintendent {location} construction",
+            f"construction field manager {location} healthcare projects"
+        ]
+    }
 def analyze_role(role_description: str, location: str) -> dict:
     api_key = os.getenv("GEMINI_API_KEY")
 

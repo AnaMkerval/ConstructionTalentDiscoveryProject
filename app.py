@@ -1,11 +1,11 @@
 import streamlit as st
 
-from services.candidate_service import extract_candidates
 from services.gemini_service import (
     analyze_role,
     generate_search_queries
 )
 from services.search_service import search_public_web
+from services.candidate_service import extract_candidates
 from services.ranking_service import rank_candidates
 
 
@@ -16,26 +16,327 @@ st.set_page_config(
 )
 
 
+if "candidates" not in st.session_state:
+    st.session_state.candidates = []
+
+if "feedback" not in st.session_state:
+    st.session_state.feedback = {}
+
+
+def candidate_key(candidate, index):
+    return (
+        candidate.get("name", "candidate")
+        + "_"
+        + str(index)
+    )
+
+
+def render_candidate(candidate, index, show_buttons=True):
+
+    name = candidate.get(
+        "name",
+        "Unnamed candidate"
+    )
+
+    score = candidate.get(
+        "match_score",
+        0
+    )
+
+    feedback_key = candidate_key(
+        candidate,
+        index
+    )
+
+    current_feedback = st.session_state.feedback.get(
+        feedback_key
+    )
+
+    with st.container(border=True):
+
+        st.subheader(name)
+
+        score_column, identity_column = st.columns(
+            [1, 3]
+        )
+
+        with score_column:
+            st.metric(
+                "Match score",
+                f"{score}/100"
+            )
+
+        with identity_column:
+            st.write(
+                candidate.get(
+                    "professional_identity",
+                    "Construction professional"
+                )
+            )
+
+            if candidate.get("location"):
+                st.caption(
+                    f"Location: {candidate['location']}"
+                )
+
+        if current_feedback:
+            st.caption(
+                f"Recruiter decision: {current_feedback}"
+            )
+
+        st.markdown("#### Summary")
+
+        st.write(
+            candidate.get(
+                "match_summary",
+                "No summary available."
+            )
+        )
+
+        score_explanation = candidate.get(
+            "score_explanation",
+            {}
+        )
+
+        if score_explanation:
+            st.markdown("#### Score explanation")
+
+            st.write(
+                f"Role match: "
+                f"{score_explanation.get('role_match', 0)}/25"
+            )
+
+            st.write(
+                f"Required experience: "
+                f"{score_explanation.get('required_experience', 0)}/35"
+            )
+
+            st.write(
+                f"Project type: "
+                f"{score_explanation.get('project_type', 0)}/20"
+            )
+
+            st.write(
+                f"Location: "
+                f"{score_explanation.get('location', 0)}/10"
+            )
+
+            st.write(
+                f"Public evidence: "
+                f"{score_explanation.get('public_evidence', 0)}/10"
+            )
+
+        verified_facts = candidate.get(
+            "verified_facts",
+            []
+        )
+
+        if verified_facts:
+            st.markdown("#### Verified facts")
+
+            for fact in verified_facts:
+                st.markdown(
+                    f"✓ **{fact.get('claim', '')}**"
+                )
+
+                st.write(
+                    fact.get("evidence", "")
+                )
+
+                source_url = fact.get(
+                    "source_url",
+                    ""
+                )
+
+                if source_url:
+                    st.markdown(
+                        f"[Open evidence source]({source_url})"
+                    )
+
+        inferences = candidate.get(
+            "reasonable_inferences",
+            []
+        )
+
+        if inferences:
+            st.markdown("#### Reasonable inferences")
+
+            for inference in inferences:
+                st.markdown(
+                    f"~ **{inference.get('claim', '')}**"
+                )
+
+                st.write(
+                    inference.get("reasoning", "")
+                )
+
+                source_url = inference.get(
+                    "source_url",
+                    ""
+                )
+
+                if source_url:
+                    st.markdown(
+                        f"[Open source]({source_url})"
+                    )
+
+        unknowns = candidate.get(
+            "unknowns",
+            []
+        )
+
+        if unknowns:
+            st.markdown("#### Still unknown")
+
+            for unknown in unknowns:
+                st.write(f"? {unknown}")
+
+        match_reasons = candidate.get(
+            "match_reasons",
+            []
+        )
+
+        if match_reasons:
+            st.markdown("#### Why this candidate may match")
+
+            for reason in match_reasons:
+                st.write(f"• {reason}")
+
+        concerns = candidate.get(
+            "concerns",
+            []
+        )
+
+        if concerns:
+            st.markdown("#### Recruiter should verify")
+
+            for concern in concerns:
+                st.warning(concern)
+
+        sources = candidate.get(
+            "sources",
+            []
+        )
+
+        if sources:
+            st.markdown("#### Sources")
+
+            for source in sources:
+                st.markdown(
+                    f"[Open original source]({source})"
+                )
+
+        if show_buttons:
+            st.divider()
+
+            button_one, button_two, button_three = st.columns(3)
+
+            with button_one:
+                if st.button(
+                    "Save candidate",
+                    key=f"save_{feedback_key}"
+                ):
+                    st.session_state.feedback[
+                        feedback_key
+                    ] = "Saved"
+
+                    st.rerun()
+
+            with button_two:
+                if st.button(
+                    "Relevant",
+                    key=f"relevant_{feedback_key}"
+                ):
+                    st.session_state.feedback[
+                        feedback_key
+                    ] = "Relevant"
+
+                    st.rerun()
+
+            with button_three:
+                if st.button(
+                    "Not relevant",
+                    key=f"irrelevant_{feedback_key}"
+                ):
+                    st.session_state.feedback[
+                        feedback_key
+                    ] = "Not relevant"
+
+                    st.rerun()
+
+
+@st.dialog("Saved candidates")
+def show_saved_candidates():
+
+    saved_candidates = []
+
+    for index, candidate in enumerate(
+        st.session_state.candidates
+    ):
+        feedback_key = candidate_key(
+            candidate,
+            index
+        )
+
+        if st.session_state.feedback.get(
+            feedback_key
+        ) == "Saved":
+            saved_candidates.append(
+                (index, candidate)
+            )
+
+    if not saved_candidates:
+        st.info(
+            "You have not saved any candidates yet."
+        )
+        return
+
+    for index, candidate in saved_candidates:
+        render_candidate(
+            candidate,
+            index,
+            show_buttons=False
+        )
+
+
 st.title("🏗️ Bright Sky Recruiting")
-st.subheader("Construction Talent Discovery")
+
+st.subheader(
+    "Construction Talent Discovery"
+)
 
 st.write(
-    "Find construction candidates by searching beyond exact job titles "
-    "and reviewing publicly available project experience."
+    "Find construction candidates by searching beyond exact "
+    "job titles and reviewing publicly available project experience."
 )
+
+saved_count = sum(
+    1
+    for feedback in st.session_state.feedback.values()
+    if feedback == "Saved"
+)
+
+if st.button(
+    f"Saved candidates ({saved_count})",
+    type="secondary"
+):
+    show_saved_candidates()
 
 st.divider()
 
-st.header("Describe the candidate you are looking for")
+st.header(
+    "Describe the candidate you are looking for"
+)
 
 role_description = st.text_area(
     "Role requirements",
     placeholder=(
-        "Example: I need a commercial construction superintendent in "
-        "Southern California with healthcare project experience and "
-        "subcontractor coordination experience."
+        "Example: I need a commercial construction "
+        "superintendent in Southern California with "
+        "healthcare project experience and subcontractor "
+        "coordination experience."
     ),
-    height=160
+    height=150
 )
 
 location = st.text_input(
@@ -43,8 +344,10 @@ location = st.text_input(
     placeholder="Example: San Diego, California"
 )
 
-
-if st.button("Analyze role", type="primary"):
+if st.button(
+    "Find possible candidates",
+    type="primary"
+):
 
     if not role_description.strip():
         st.warning(
@@ -57,89 +360,26 @@ if st.button("Analyze role", type="primary"):
         )
 
     else:
+
         try:
+
             with st.spinner(
-                "Analyzing construction role..."
+                "Searching public sources and analyzing candidates..."
             ):
+
                 role_requirements = analyze_role(
                     role_description,
                     location
                 )
 
-            st.success(
-                "Role analyzed successfully."
-            )
-
-            st.header(
-                "Structured search requirements"
-            )
-
-            st.json(
-                role_requirements
-            )
-
-            with st.spinner(
-                "Creating construction-specific search strategies..."
-            ):
                 search_queries = generate_search_queries(
                     role_requirements
                 )
 
-            st.success(
-                "Search strategies created."
-            )
-
-            st.header(
-                "Search strategies"
-            )
-
-            st.json(
-                search_queries
-            )
-
-            with st.spinner(
-                "Searching public web sources..."
-            ):
                 web_results = search_public_web(
                     search_queries
                 )
 
-            st.success(
-                f"Found {len(web_results)} unique public web sources."
-            )
-
-            st.header(
-                "Public web results"
-            )
-
-            for index, result in enumerate(
-                web_results,
-                start=1
-            ):
-                with st.expander(
-                    f"{index}. {result['title']}"
-                ):
-                    st.caption(
-                        f"Search category: "
-                        f"{result['category']}"
-                    )
-
-                    st.write(
-                        f"Search query: "
-                        f"{result['query']}"
-                    )
-
-                    st.write(
-                        result["content"]
-                    )
-
-                    st.markdown(
-                        f"[Open original source]({result['url']})"
-                    )
-
-            with st.spinner(
-                "Identifying possible construction candidates..."
-            ):
                 candidates = extract_candidates(
                     role_requirements,
                     web_results
@@ -150,217 +390,37 @@ if st.button("Analyze role", type="primary"):
                     role_requirements
                 )
 
+            st.session_state.candidates = candidates
+            st.session_state.feedback = {}
+
             st.success(
-                f"Identified {len(candidates)} possible candidates."
+                f"Search complete. Found "
+                f"{len(candidates)} possible candidates."
             )
-
-            st.header(
-                "Possible candidates"
-            )
-
-            if not candidates:
-                st.info(
-                    "No clearly identifiable candidates were found "
-                    "in the available public sources."
-                )
-
-            for candidate in candidates:
-
-                with st.container(border=True):
-
-                    st.subheader(
-                        candidate.get(
-                            "name",
-                            "Unnamed candidate"
-                        )
-                    )
-
-                    st.metric(
-                        "Transparent match score",
-                        f"{candidate.get('match_score', 0)}/100"
-                    )
-
-                    st.write(
-                        candidate.get(
-                            "professional_identity",
-                            "Professional identity not available."
-                        )
-                    )
-
-                    if candidate.get("location"):
-                        st.caption(
-                            f"Location: "
-                            f"{candidate['location']}"
-                        )
-
-                    st.markdown(
-                        "### Summary"
-                    )
-
-                    st.write(
-                        candidate.get(
-                            "match_summary",
-                            "No summary available."
-                        )
-                    )
-
-                    st.markdown(
-                        "### Score explanation"
-                    )
-
-                    score_breakdown = candidate.get(
-                        "score_breakdown",
-                        {}
-                    )
-
-                    st.write(
-                        "Required experience: "
-                        f"{score_breakdown.get('required_experience', 0)}/40"
-                    )
-
-                    st.write(
-                        "Project type: "
-                        f"{score_breakdown.get('project_type', 0)}/25"
-                    )
-
-                    st.write(
-                        "Location: "
-                        f"{score_breakdown.get('location', 0)}/15"
-                    )
-
-                    st.write(
-                        "Verified evidence: "
-                        f"{score_breakdown.get('verified_evidence', 0)}/10"
-                    )
-
-                    st.write(
-                        "Supporting inferences: "
-                        f"{score_breakdown.get('supporting_inferences', 0)}/10"
-                    )
-
-                    st.markdown(
-                        "### Verified facts"
-                    )
-
-                    verified_facts = candidate.get(
-                        "verified_facts",
-                        []
-                    )
-
-                    if verified_facts:
-                        for fact in verified_facts:
-
-                            st.markdown(
-                                f"✓ **{fact.get('claim', '')}**"
-                            )
-
-                            st.write(
-                                "Evidence: "
-                                f"{fact.get('evidence', '')}"
-                            )
-
-                            st.markdown(
-                                f"[Source]("
-                                f"{fact.get('source_url', '#')})"
-                            )
-                    else:
-                        st.write(
-                            "No verified facts were found."
-                        )
-
-                    st.markdown(
-                        "### Reasonable inferences"
-                    )
-
-                    inferences = candidate.get(
-                        "reasonable_inferences",
-                        []
-                    )
-
-                    if inferences:
-                        for inference in inferences:
-
-                            st.markdown(
-                                f"~ **{inference.get('claim', '')}**"
-                            )
-
-                            st.write(
-                                "Reasoning: "
-                                f"{inference.get('reasoning', '')}"
-                            )
-
-                            st.markdown(
-                                f"[Source]("
-                                f"{inference.get('source_url', '#')})"
-                            )
-                    else:
-                        st.write(
-                            "No reasonable inferences were identified."
-                        )
-
-                    st.markdown(
-                        "### Unknowns"
-                    )
-
-                    unknowns = candidate.get(
-                        "unknowns",
-                        []
-                    )
-
-                    if unknowns:
-                        for unknown in unknowns:
-                            st.markdown(
-                                f"? {unknown}"
-                            )
-                    else:
-                        st.write(
-                            "No additional unknowns were listed."
-                        )
-
-                    st.markdown(
-                        "### Why this candidate may match"
-                    )
-
-                    match_reasons = candidate.get(
-                        "match_reasons",
-                        []
-                    )
-
-                    if match_reasons:
-                        for reason in match_reasons:
-                            st.markdown(
-                                f"- {reason}"
-                            )
-                    else:
-                        st.write(
-                            "No specific match reasons were identified."
-                        )
-
-                    st.markdown(
-                        "### Sources"
-                    )
-
-                    sources = candidate.get(
-                        "sources",
-                        []
-                    )
-
-                    if sources:
-                        for source in sources:
-                            st.markdown(
-                                f"- [Open source]({source})"
-                            )
-                    else:
-                        st.write(
-                            "No source links were returned."
-                        )
 
         except Exception as error:
+
             st.error(
-                "The role analysis, web search, or candidate "
-                "extraction failed."
+                "The candidate search failed."
             )
 
-            st.code(
-                str(error)
-            )
+            st.code(str(error))
+
+
+if st.session_state.candidates:
+
+    st.header("Possible candidates")
+
+    for index, candidate in enumerate(
+        st.session_state.candidates
+    ):
+        render_candidate(
+            candidate,
+            index,
+            show_buttons=True
+        )
+
+elif st.session_state.candidates == []:
+
+    if "feedback" in st.session_state:
+        pass
