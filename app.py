@@ -1,5 +1,8 @@
 import streamlit as st
 
+from services.gemini_service import analyze_role
+
+
 st.set_page_config(
     page_title="Bright Sky Recruiting",
     page_icon="🏗️",
@@ -33,9 +36,25 @@ location = st.text_input(
     placeholder="Example: San Diego, California"
 )
 
-if st.button("Start candidate search", type="primary"):
+if st.button("Analyze role", type="primary"):
     if not role_description.strip():
         st.warning("Please describe the role requirements first.")
+    elif not location.strip():
+        st.warning("Please enter a location.")
     else:
-        st.success("The search interface is working.")
-        st.write("Live candidate search will be connected in the next steps.")
+        try:
+            with st.spinner("Analyzing construction role..."):
+                role_requirements = analyze_role(
+                    role_description,
+                    location
+                )
+
+            st.success("Role analyzed successfully.")
+
+            st.header("Structured search requirements")
+
+            st.json(role_requirements)
+
+        except Exception as error:
+            st.error("The role analysis failed.")
+            st.code(str(error))
