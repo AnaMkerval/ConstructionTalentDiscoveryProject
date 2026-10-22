@@ -217,4 +217,8 @@ marimo/_lsp/
 __marimo__/
 
 # Streamlit
+.env
 .streamlit/secrets.toml
+.venv/
+_pycache_/
+
